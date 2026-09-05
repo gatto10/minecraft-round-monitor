@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Minecraft Monitor Installer</title>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<style>
+body{font-family:system-ui;background:#0d1117;color:#fff;max-width:720px;margin:40px auto;padding:24px}
+.card{background:#18212b;border:1px solid #2b3948;border-radius:20px;padding:24px}
+h1{margin-top:0}.ok{color:#6ee787}.muted{color:#9da7b3}
+esp-web-install-button{display:block;margin-top:20px}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>⛏️ Minecraft Monitor</h1>
+<p>Installer für Waveshare ESP32-S3-Touch-AMOLED-1.75.</p>
+<p class="muted">USB anschließen, Chrome/Edge verwenden und installieren.</p>
+<esp-web-install-button manifest="manifest.json">
+  <button slot="activate">Minecraft Monitor installieren</button>
+</esp-web-install-button>
+<p class="ok">Nach dem ersten Start erzeugt das Display das WLAN „MinecraftMonitor-Setup“.</p>
+</div>
+</body></html>
