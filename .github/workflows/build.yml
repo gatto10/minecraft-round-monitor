@@ -27,6 +27,9 @@ jobs:
           arduino-cli lib install "ArduinoJson"
           arduino-cli lib install "SensorLib"
 
+      - name: Prepare sketch name
+        run: cp firmware/MinecraftRoundMonitor.ino firmware/firmware.ino
+
       - name: Compile
         run: |
           mkdir -p build
@@ -41,10 +44,10 @@ jobs:
           python -m esptool --chip esp32s3 merge_bin \
             -o minecraft-monitor-firmware.bin \
             --flash_mode dio --flash_size 16MB --flash_freq 80m \
-            0x0 build/MinecraftRoundMonitor.ino.bootloader.bin \
-            0x8000 build/MinecraftRoundMonitor.ino.partitions.bin \
+            0x0 build/firmware.ino.bootloader.bin \
+            0x8000 build/firmware.ino.partitions.bin \
             0xe000 build/boot_app0.bin \
-            0x10000 build/MinecraftRoundMonitor.ino.bin
+            0x10000 build/firmware.ino.bin
 
       - uses: actions/upload-artifact@v4
         with:
