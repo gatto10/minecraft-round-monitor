@@ -28,7 +28,7 @@ jobs:
           arduino-cli lib install "SensorLib"
 
       - name: Prepare sketch name
-        run: cp firmware/MinecraftRoundMonitor.ino firmware/firmware.ino
+        run: mv firmware/MinecraftRoundMonitor.ino firmware/firmware.ino
 
       - name: Compile
         run: |
