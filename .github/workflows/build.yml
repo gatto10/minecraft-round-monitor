@@ -6,6 +6,9 @@ on:
       - "firmware/**"
       - ".github/workflows/build.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,6 +29,7 @@ jobs:
           arduino-cli lib install "GFX Library for Arduino"
           arduino-cli lib install "ArduinoJson"
           arduino-cli lib install "SensorLib"
+          arduino-cli lib install "XPowersLib"
 
       - name: Prepare sketch name
         run: mv firmware/MinecraftRoundMonitor.ino firmware/firmware.ino
@@ -53,3 +57,12 @@ jobs:
         with:
           name: minecraft-monitor-firmware
           path: minecraft-monitor-firmware.bin
+
+      - name: Publish firmware to installer
+        run: |
+          cp minecraft-monitor-firmware.bin docs/firmware.bin
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/firmware.bin
+          git diff --cached --quiet || git commit -m "Update installer firmware"
+          git push
