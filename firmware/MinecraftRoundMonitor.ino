@@ -9,6 +9,10 @@
 #include <ArduinoJson.h>
 #include "TouchDrvCSTXXX.hpp"
 
+#define XPOWERS_CHIP_AXP2101
+#include <XPowersLib.h>
+
+// Waveshare ESP32-S3-Touch-AMOLED-1.75 (Standard, not 1.75C)
 #define LCD_SDIO0 4
 #define LCD_SDIO1 5
 #define LCD_SDIO2 6
@@ -26,6 +30,8 @@
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
 Arduino_CO5300 *gfx = new Arduino_CO5300(bus, LCD_RESET, 0, LCD_WIDTH, LCD_HEIGHT, 6, 0, 0, 0);
 TouchDrvCST92xx touch;
+XPowersPMU pmu;
+
 const uint8_t TOUCH_ADDR = 0x5A;
 int16_t tx[2], ty[2];
 Preferences prefs;
@@ -42,6 +48,16 @@ String onlineNames[8]; int onlineCount = 0;
 String recentPlayer[5], recentAction[5], recentTime[5]; int recentCount = 0;
 String unknownName = "";
 uint16_t C_BG=0x0861,C_CARD=0x10A2,C_WHITE=0xFFFF,C_MUTED=0xA514,C_GREEN=0x4E6A,C_RED=0xF986,C_YELLOW=0xFEC0,C_CYAN=0x4DFF;
+
+void enablePanelPower(){
+  if(pmu.begin(Wire,AXP2101_SLAVE_ADDRESS,IIC_SDA,IIC_SCL)){
+    pmu.setBLDO1Voltage(3300);
+    pmu.enableBLDO1();
+    delay(20);
+  }else{
+    Serial.println("AXP2101 not detected; continuing with current panel power state");
+  }
+}
 
 void centerText(const String &s,int y,int size,uint16_t color){gfx->setTextSize(size);gfx->setTextColor(color);int16_t x1,y1;uint16_t w,h;gfx->getTextBounds(s,0,y,&x1,&y1,&w,&h);gfx->setCursor((LCD_WIDTH-w)/2,y);gfx->print(s);} 
 void drawHeader(const String &title){gfx->fillScreen(C_BG);centerText("MINECRAFT",38,3,C_CYAN);centerText(title,78,2,C_WHITE);} 
@@ -60,7 +76,40 @@ bool connectWifi(){prefs.begin("mcmon",true);wifiSsid=prefs.getString("ssid","")
 
 bool fetchStatus(){if(WiFi.status()!=WL_CONNECTED)return false;HTTPClient http;http.setTimeout(2500);http.begin(apiUrl);int code=http.GET();if(code!=200){http.end();return false;}String payload=http.getString();http.end();DynamicJsonDocument doc(8192);if(deserializeJson(doc,payload))return false;serverOnline=doc["server_online"]|false;playersOnline=doc["players_online"]|0;playersMax=doc["players_max"]|20;pingMs=doc["ping_ms"]|0.0;onlineCount=0;for(JsonVariant v:doc["online_names"].as<JsonArray>())if(onlineCount<8)onlineNames[onlineCount++]=v.as<String>();unknownName="";JsonArray unk=doc["unknown_players"].as<JsonArray>();if(!unk.isNull()&&unk.size()>0)unknownName=unk[0].as<String>();recentCount=0;for(JsonObject e:doc["recent_events"].as<JsonArray>()){if(recentCount>=5)break;recentTime[recentCount]=e["time"].as<String>();recentPlayer[recentCount]=e["player"].as<String>();recentAction[recentCount]=e["action"].as<String>();recentCount++;}return true;}
 
-void handleTouch(){uint8_t n=touch.getPoint(tx,ty,2);if(!n)return;unsigned long now=millis();if(now-lastTouch<350)return;lastTouch=now;if(unknownName.length()){unknownName="";redraw();return;}int x=tx[0];if(x<155)page=(page+2)%3;else page=(page+1)%3;redraw();}
+void handleTouch(){
+  // CST9217 INT is active-low. Avoid unnecessary I2C reads while no touch is pending.
+  if(digitalRead(TP_INT)==HIGH)return;
+  uint8_t n=touch.getPoint(tx,ty,2);if(!n)return;
+  unsigned long now=millis();if(now-lastTouch<350)return;lastTouch=now;
+  if(unknownName.length()){unknownName="";redraw();return;}
+  int x=tx[0];if(x<155)page=(page+2)%3;else page=(page+1)%3;redraw();
+}
 
-void setup(){Serial.begin(115200);Wire.begin(IIC_SDA,IIC_SCL);gfx->begin();gfx->setBrightness(180);gfx->fillScreen(C_BG);touch.setPins(TP_RESET,TP_INT);touch.begin(Wire,TOUCH_ADDR,IIC_SDA,IIC_SCL);touch.setMaxCoordinates(LCD_WIDTH,LCD_HEIGHT);touch.setMirrorXY(true,true);if(!connectWifi()){startConfigPortal();return;}fetchStatus();redraw();}
+void setup(){
+  Serial.begin(115200);
+  Wire.begin(IIC_SDA,IIC_SCL);
+  Wire.setTimeOut(50);
+
+  // The panel VDD is supplied by AXP2101 BLDO1; enable it before display init.
+  enablePanelPower();
+  if(!gfx->begin(80000000))Serial.println("Display init failed");
+  gfx->setBrightness(180);
+  gfx->fillScreen(C_BG);
+
+  touch.setPins(TP_RESET,TP_INT);
+  bool touchOk=false;
+  for(int i=0;i<3 && !touchOk;i++){
+    touchOk=touch.begin(Wire,TOUCH_ADDR,IIC_SDA,IIC_SCL);
+    if(!touchOk)delay(150);
+  }
+  if(touchOk)touch.reset();
+  touch.setMaxCoordinates(LCD_WIDTH,LCD_HEIGHT);
+  touch.setMirrorXY(true,true);
+  pinMode(TP_INT,INPUT_PULLUP);
+
+  if(!connectWifi()){startConfigPortal();return;}
+  fetchStatus();
+  redraw();
+}
+
 void loop(){if(configMode){dns.processNextRequest();setupServer.handleClient();delay(5);return;}handleTouch();if(millis()-lastFetch>3000){lastFetch=millis();bool ok=fetchStatus();if(!ok&&WiFi.status()!=WL_CONNECTED)WiFi.reconnect();redraw();}delay(15);}
